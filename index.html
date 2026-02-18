@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BlameGame: Backpropagation Visualized</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #0a0e17;
+  color: #c8d6e5;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+header {
+  text-align: center;
+  padding: 18px 20px 10px;
+  background: linear-gradient(180deg, #111827 0%, #0a0e17 100%);
+  border-bottom: 1px solid #1e293b;
+}
+
+header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #60a5fa, #a78bfa, #f472b6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.5px;
+}
+
+header p {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+#app-container {
+  display: flex;
+  gap: 0;
+  padding: 12px 16px;
+  max-width: 1600px;
+  margin: 0 auto;
+  align-items: flex-start;
+}
+
+/* Left panel: drawing + controls */
+#left-panel {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.panel-box {
+  background: #111827;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.panel-box h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #64748b;
+  margin-bottom: 10px;
+}
+
+#draw-canvas {
+  display: block;
+  margin: 0 auto;
+  cursor: crosshair;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  image-rendering: pixelated;
+}
+
+.btn-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+button {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+button:hover {
+  background: #334155;
+  color: #e2e8f0;
+  border-color: #475569;
+}
+
+button.primary {
+  background: #1d4ed8;
+  color: #e0e7ff;
+  border-color: #3b82f6;
+}
+
+button.primary:hover {
+  background: #2563eb;
+}
+
+button.danger {
+  background: #7f1d1d;
+  color: #fca5a5;
+  border-color: #991b1b;
+}
+
+button.danger:hover {
+  background: #991b1b;
+}
+
+/* Target selector */
+#target-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+#target-row label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+#target-select {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+/* Center: network canvas */
+#center-panel {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#network-canvas {
+  display: block;
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #1e293b;
+  background: #0d1117;
+}
+
+/* Right panel: output bars + info */
+#right-panel {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.bar-label {
+  font-size: 13px;
+  font-weight: 600;
+  width: 18px;
+  text-align: right;
+  color: #94a3b8;
+}
+
+.bar-track {
+  flex: 1;
+  height: 18px;
+  background: #1e293b;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.15s ease, background 0.15s ease;
+  min-width: 1px;
+}
+
+.bar-value {
+  font-size: 11px;
+  width: 40px;
+  text-align: right;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Info / instructions */
+#info-box {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+#info-box ul {
+  padding-left: 16px;
+  margin-top: 4px;
+}
+
+#info-box li {
+  margin-bottom: 3px;
+}
+
+/* Tooltip */
+#tooltip {
+  position: fixed;
+  background: #1e293b;
+  border: 1px solid #475569;
+  color: #e2e8f0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 1000;
+  display: none;
+  white-space: pre-line;
+  max-width: 240px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+/* Loss display */
+#loss-display {
+  font-size: 13px;
+  color: #94a3b8;
+  margin-top: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+#loss-display span {
+  color: #f472b6;
+  font-weight: 600;
+}
+
+/* Animation pulse overlay */
+.gradient-pulse {
+  position: absolute;
+  pointer-events: none;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>BlameGame</h1>
+  <p>Wiggle weights. Watch blame flow. Feel backpropagation.</p>
+</header>
+
+<div id="app-container">
+  <!-- Left Panel -->
+  <div id="left-panel">
+    <div class="panel-box">
+      <h3>Draw a Digit (16&times;16)</h3>
+      <canvas id="draw-canvas" width="192" height="192"></canvas>
+      <div class="btn-row">
+        <button onclick="clearDrawing()">Clear</button>
+        <button onclick="loadSampleDigit()">Sample</button>
+      </div>
+    </div>
+
+    <div class="panel-box">
+      <h3>Backpropagation</h3>
+      <div id="target-row">
+        <label>Target:</label>
+        <select id="target-select">
+          <option value="0">0</option><option value="1">1</option>
+          <option value="2">2</option><option value="3">3</option>
+          <option value="4">4</option><option value="5">5</option>
+          <option value="6">6</option><option value="7">7</option>
+          <option value="8">8</option><option value="9">9</option>
+        </select>
+      </div>
+      <div id="loss-display">Loss: <span id="loss-val">&mdash;</span></div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="primary" onclick="runBackpropAnimated()">Run Backprop</button>
+        <button onclick="stepGradient()">Step</button>
+      </div>
+    </div>
+
+    <div class="panel-box">
+      <h3>Weights</h3>
+      <div class="btn-row">
+        <button onclick="resetWeights()">Reset (Random)</button>
+        <button onclick="loadPretrained()">Load Pre-trained</button>
+      </div>
+    </div>
+
+    <div class="panel-box" id="info-box">
+      <h3>How to Explore</h3>
+      <ul>
+        <li><b>Draw</b> on the grid at top</li>
+        <li><b>Hover</b> connections to see weights</li>
+        <li><b>Drag up/down</b> on a connection to wiggle its weight</li>
+        <li>Watch outputs change in real-time</li>
+        <li><b>Run Backprop</b> to see blame flow animated</li>
+        <li><b>Step</b> to apply one gradient update</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Center Panel -->
+  <div id="center-panel">
+    <canvas id="network-canvas"></canvas>
+  </div>
+
+  <!-- Right Panel -->
+  <div id="right-panel">
+    <div class="panel-box">
+      <h3>Output Probabilities</h3>
+      <div id="output-bars"></div>
+    </div>
+    <div class="panel-box">
+      <h3>Sensitivity (|Gradient|)</h3>
+      <div id="sensitivity-bars"></div>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ============================================================
+// NEURAL NETWORK CORE
+// ============================================================
+
+const LAYERS = [256, 16, 16, 10];
+const LAYER_NAMES = ['Input (16\u00d716)', 'Hidden 1 (16)', 'Hidden 2 (16)', 'Output (10)'];
+const LEARNING_RATE = 0.01;
+
+// Network state
+let weights = [];   // weights[l][j][i] = weight from neuron i in layer l to neuron j in layer l+1
+let biases = [];    // biases[l][j] = bias for neuron j in layer l+1
+let activations = []; // activations[l][i]
+let preActivations = []; // z values before activation
+let gradWeights = [];
+let gradBiases = [];
+let gradMagnitudes = []; // for coloring
+
+let pixels = new Float32Array(256); // 16x16 drawing
+
+// Xavier initialization
+function xavierInit(fanIn, fanOut) {
+  const std = Math.sqrt(2.0 / (fanIn + fanOut));
+  return () => (Math.random() * 2 - 1) * std;
+}
+
+function initWeights() {
+  weights = [];
+  biases = [];
+  gradWeights = [];
+  gradBiases = [];
+  gradMagnitudes = [];
+
+  for (let l = 0; l < LAYERS.length - 1; l++) {
+    const fanIn = LAYERS[l];
+    const fanOut = LAYERS[l + 1];
+    const init = xavierInit(fanIn, fanOut);
+
+    const w = [];
+    const gw = [];
+    const gm = [];
+    for (let j = 0; j < fanOut; j++) {
+      const row = [];
+      const gr = [];
+      const gmr = [];
+      for (let i = 0; i < fanIn; i++) {
+        row.push(init());
+        gr.push(0);
+        gmr.push(0);
+      }
+      w.push(row);
+      gw.push(gr);
+      gm.push(gmr);
+    }
+    weights.push(w);
+    gradWeights.push(gw);
+    gradMagnitudes.push(gm);
+
+    const b = [];
+    const gb = [];
+    for (let j = 0; j < fanOut; j++) {
+      b.push(0);
+      gb.push(0);
+    }
+    biases.push(b);
+    gradBiases.push(gb);
+  }
+}
+
+function relu(x) { return x > 0 ? x : 0; }
+function reluDeriv(x) { return x > 0 ? 1 : 0; }
+
+function softmax(arr) {
+  const max = Math.max(...arr);
+  const exps = arr.map(x => Math.exp(x - max));
+  const sum = exps.reduce((a, b) => a + b, 0);
+  return exps.map(x => x / sum);
+}
+
+function forwardPass(input) {
+  activations = [Array.from(input)];
+  preActivations = [Array.from(input)];
+
+  for (let l = 0; l < weights.length; l++) {
+    const prevAct = activations[l];
+    const nOut = LAYERS[l + 1];
+    const z = [];
+    const a = [];
+
+    for (let j = 0; j < nOut; j++) {
+      let sum = biases[l][j];
+      for (let i = 0; i < prevAct.length; i++) {
+        sum += weights[l][j][i] * prevAct[i];
+      }
+      z.push(sum);
+
+      if (l < weights.length - 1) {
+        a.push(relu(sum));
+      } else {
+        a.push(sum); // softmax applied separately
+      }
+    }
+
+    preActivations.push(z);
+
+    if (l === weights.length - 1) {
+      activations.push(softmax(z));
+    } else {
+      activations.push(a);
+    }
+  }
+
+  return activations[activations.length - 1];
+}
+
+function crossEntropyLoss(probs, target) {
+  return -Math.log(Math.max(probs[target], 1e-15));
+}
+
+function backwardPass(target) {
+  const L = weights.length;
+  const nOut = LAYERS[L];
+
+  // Output layer gradient: softmax + cross-entropy => dL/dz = prob - one_hot
+  const outputProbs = activations[L];
+  let deltaNext = [];
+  for (let j = 0; j < nOut; j++) {
+    deltaNext.push(outputProbs[j] - (j === target ? 1 : 0));
+  }
+
+  // Go backward through layers
+  for (let l = L - 1; l >= 0; l--) {
+    const prevAct = activations[l];
+    const nCur = LAYERS[l + 1];
+    const nPrev = LAYERS[l];
+
+    // Compute weight gradients for this layer
+    for (let j = 0; j < nCur; j++) {
+      for (let i = 0; i < nPrev; i++) {
+        gradWeights[l][j][i] = deltaNext[j] * prevAct[i];
+        gradMagnitudes[l][j][i] = Math.abs(gradWeights[l][j][i]);
+      }
+      gradBiases[l][j] = deltaNext[j];
+    }
+
+    // Compute delta for previous layer (if not input)
+    if (l > 0) {
+      const deltaPrev = [];
+      for (let i = 0; i < nPrev; i++) {
+        let sum = 0;
+        for (let j = 0; j < nCur; j++) {
+          sum += weights[l][j][i] * deltaNext[j];
+        }
+        deltaPrev.push(sum * reluDeriv(preActivations[l][i]));
+      }
+      deltaNext = deltaPrev;
+    }
+  }
+}
+
+function applyGradients() {
+  for (let l = 0; l < weights.length; l++) {
+    for (let j = 0; j < weights[l].length; j++) {
+      for (let i = 0; i < weights[l][j].length; i++) {
+        weights[l][j][i] -= LEARNING_RATE * gradWeights[l][j][i];
+      }
+      biases[l][j] -= LEARNING_RATE * gradBiases[l][j];
+    }
+  }
+}
+
+// ============================================================
+// DRAWING CANVAS
+// ============================================================
+
+const drawCanvas = document.getElementById('draw-canvas');
+const drawCtx = drawCanvas.getContext('2d');
+let isDrawing = false;
+const CELL = 12; // 192 / 16
+
+function renderDrawing() {
+  drawCtx.fillStyle = '#0d1117';
+  drawCtx.fillRect(0, 0, 192, 192);
+
+  for (let r = 0; r < 16; r++) {
+    for (let c = 0; c < 16; c++) {
+      const v = pixels[r * 16 + c];
+      if (v > 0) {
+        const bright = Math.floor(v * 255);
+        drawCtx.fillStyle = `rgb(${bright}, ${bright}, ${bright})`;
+        drawCtx.fillRect(c * CELL, r * CELL, CELL, CELL);
+      }
+    }
+  }
+
+  // Grid lines
+  drawCtx.strokeStyle = '#1e293b';
+  drawCtx.lineWidth = 0.5;
+  for (let i = 0; i <= 16; i++) {
+    drawCtx.beginPath();
+    drawCtx.moveTo(i * CELL, 0);
+    drawCtx.lineTo(i * CELL, 192);
+    drawCtx.stroke();
+    drawCtx.beginPath();
+    drawCtx.moveTo(0, i * CELL);
+    drawCtx.lineTo(192, i * CELL);
+    drawCtx.stroke();
+  }
+}
+
+function drawAt(x, y) {
+  const c = Math.floor(x / CELL);
+  const r = Math.floor(y / CELL);
+  if (r >= 0 && r < 16 && c >= 0 && c < 16) {
+    pixels[r * 16 + c] = 1.0;
+    // Soft brush: also lightly fill neighbors
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dr === 0 && dc === 0) continue;
+        const nr = r + dr;
+        const nc = c + dc;
+        if (nr >= 0 && nr < 16 && nc >= 0 && nc < 16) {
+          pixels[nr * 16 + nc] = Math.max(pixels[nr * 16 + nc], 0.3);
+        }
+      }
+    }
+    renderDrawing();
+    runForwardAndRender();
+  }
+}
+
+function getDrawPos(e) {
+  const rect = drawCanvas.getBoundingClientRect();
+  const scaleX = 192 / rect.width;
+  const scaleY = 192 / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+drawCanvas.addEventListener('mousedown', e => {
+  isDrawing = true;
+  const pos = getDrawPos(e);
+  drawAt(pos.x, pos.y);
+});
+drawCanvas.addEventListener('mousemove', e => {
+  if (!isDrawing) return;
+  const pos = getDrawPos(e);
+  drawAt(pos.x, pos.y);
+});
+drawCanvas.addEventListener('mouseup', () => isDrawing = false);
+drawCanvas.addEventListener('mouseleave', () => isDrawing = false);
+
+// Touch support
+drawCanvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  isDrawing = true;
+  const touch = e.touches[0];
+  const pos = getDrawPos(touch);
+  drawAt(pos.x, pos.y);
+});
+drawCanvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!isDrawing) return;
+  const touch = e.touches[0];
+  const pos = getDrawPos(touch);
+  drawAt(pos.x, pos.y);
+});
+drawCanvas.addEventListener('touchend', () => isDrawing = false);
+
+function clearDrawing() {
+  pixels.fill(0);
+  renderDrawing();
+  runForwardAndRender();
+}
+
+// ============================================================
+// NETWORK CANVAS RENDERING
+// ============================================================
+
+const netCanvas = document.getElementById('network-canvas');
+const netCtx = netCanvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+
+// Layout positions
+let neuronPositions = []; // neuronPositions[l][i] = {x, y}
+let connectionHitboxes = []; // for mouse interaction
+let canvasW = 900;
+let canvasH = 560;
+
+// Interaction state
+let hoveredConnection = null;
+let draggingConnection = null;
+let dragStartY = 0;
+let dragStartWeight = 0;
+
+// Animation state
+let backpropAnimPhase = -1; // -1 = not animating, 0..2 = layer being animated
+let backpropAnimProgress = 0;
+let backpropAnimStartTime = 0;
+const ANIM_DURATION = 600; // ms per layer
+
+function resizeNetworkCanvas() {
+  const container = document.getElementById('center-panel');
+  const rect = container.getBoundingClientRect();
+  canvasW = Math.max(600, Math.floor(rect.width));
+  canvasH = 560;
+  netCanvas.width = canvasW;
+  netCanvas.height = canvasH;
+  computeLayout();
+}
+
+function computeLayout() {
+  neuronPositions = [];
+  connectionHitboxes = [];
+
+  const layerX = [];
+  const margin = 80;
+  const usableW = canvasW - 2 * margin;
+
+  // Layer 0 (input) gets a special block representation
+  // Layers 1, 2, 3 are spaced in the remaining area
+  const inputBlockX = margin + 40;
+  const remainStart = inputBlockX + 120;
+  const spacing = (canvasW - margin - remainStart) / 2;
+
+  layerX.push(inputBlockX); // layer 0: input block center
+  for (let l = 1; l < LAYERS.length; l++) {
+    layerX.push(remainStart + (l - 1) * spacing);
+  }
+
+  for (let l = 0; l < LAYERS.length; l++) {
+    const n = LAYERS[l];
+    const positions = [];
+
+    if (l === 0) {
+      // Input layer: arrange as 16x16 grid block
+      const blockSize = 120;
+      const cellSize = blockSize / 16;
+      const startX = layerX[0] - blockSize / 2;
+      const startY = canvasH / 2 - blockSize / 2;
+
+      for (let idx = 0; idx < 256; idx++) {
+        const r = Math.floor(idx / 16);
+        const c = idx % 16;
+        positions.push({
+          x: startX + c * cellSize + cellSize / 2,
+          y: startY + r * cellSize + cellSize / 2,
+          isGrid: true
+        });
+      }
+    } else {
+      const totalH = Math.min(canvasH - 80, n * 30);
+      const gap = totalH / (n - 1 || 1);
+      const startY = canvasH / 2 - totalH / 2;
+
+      for (let i = 0; i < n; i++) {
+        positions.push({
+          x: layerX[l],
+          y: startY + i * gap,
+          isGrid: false
+        });
+      }
+    }
+
+    neuronPositions.push(positions);
+  }
+
+  // Precompute connection hitboxes (skip layer 0 individual connections for perf)
+  connectionHitboxes = [];
+  for (let l = 0; l < weights.length; l++) {
+    const layerHitboxes = [];
+    const nOut = LAYERS[l + 1];
+    const nIn = LAYERS[l];
+
+    if (l === 0) {
+      // For input->hidden1, use bundled connections from grid edges
+      // We still track individual weights but use simplified hit detection
+      for (let j = 0; j < nOut; j++) {
+        // Create one hitbox per output neuron (representing the bundle)
+        const target = neuronPositions[1][j];
+        const blockRight = neuronPositions[0][15].x + 4; // right edge of grid
+        const blockCenterY = canvasH / 2;
+
+        layerHitboxes.push({
+          layer: l,
+          fromBundle: true,
+          toIdx: j,
+          x1: blockRight,
+          y1: blockCenterY + (j - nOut / 2) * 4,
+          x2: target.x,
+          y2: target.y
+        });
+      }
+    } else {
+      for (let j = 0; j < nOut; j++) {
+        for (let i = 0; i < nIn; i++) {
+          const from = neuronPositions[l][i];
+          const to = neuronPositions[l + 1][j];
+          layerHitboxes.push({
+            layer: l,
+            fromIdx: i,
+            toIdx: j,
+            x1: from.x,
+            y1: from.y,
+            x2: to.x,
+            y2: to.y,
+            fromBundle: false
+          });
+        }
+      }
+    }
+    connectionHitboxes.push(layerHitboxes);
+  }
+}
+
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const projX = x1 + t * dx;
+  const projY = y1 + t * dy;
+  return Math.hypot(px - projX, py - projY);
+}
+
+function findConnection(mx, my) {
+  const threshold = 5;
+  let best = null;
+  let bestDist = threshold;
+
+  // Check layers 1 and 2 (hidden connections) - these have individual lines
+  for (let l = 1; l < connectionHitboxes.length; l++) {
+    for (const hb of connectionHitboxes[l]) {
+      const d = distToSegment(mx, my, hb.x1, hb.y1, hb.x2, hb.y2);
+      if (d < bestDist) {
+        bestDist = d;
+        best = hb;
+      }
+    }
+  }
+
+  // Check layer 0 bundles
+  for (const hb of connectionHitboxes[0]) {
+    const d = distToSegment(mx, my, hb.x1, hb.y1, hb.x2, hb.y2);
+    if (d < bestDist) {
+      bestDist = d;
+      best = hb;
+    }
+  }
+
+  return best;
+}
+
+function gradientColor(magnitude, maxMag) {
+  if (maxMag === 0) maxMag = 1;
+  const t = Math.min(magnitude / maxMag, 1);
+  // Blue (low) -> Red (high)
+  const r = Math.floor(40 + t * 215);
+  const g = Math.floor(60 * (1 - t));
+  const b = Math.floor(200 * (1 - t) + 40);
+  return `rgb(${r},${g},${b})`;
+}
+
+function weightColor(w) {
+  const t = Math.min(Math.abs(w) * 3, 1);
+  if (w >= 0) {
+    return `rgba(96, 165, 250, ${0.1 + t * 0.6})`;
+  } else {
+    return `rgba(248, 113, 113, ${0.1 + t * 0.6})`;
+  }
+}
+
+function weightWidth(w) {
+  return 0.5 + Math.min(Math.abs(w) * 3, 3);
+}
+
+function renderNetwork() {
+  netCtx.clearRect(0, 0, canvasW, canvasH);
+
+  // Find max gradient magnitude for coloring
+  let maxGrad = 0.001;
+  for (let l = 0; l < gradMagnitudes.length; l++) {
+    for (let j = 0; j < gradMagnitudes[l].length; j++) {
+      for (let i = 0; i < gradMagnitudes[l][j].length; i++) {
+        if (gradMagnitudes[l][j][i] > maxGrad) maxGrad = gradMagnitudes[l][j][i];
+      }
+    }
+  }
+
+  const hasGradients = maxGrad > 0.001;
+
+  // Draw connections
+  for (let l = 0; l < weights.length; l++) {
+    const nOut = LAYERS[l + 1];
+    const nIn = LAYERS[l];
+
+    if (l === 0) {
+      // Draw bundled connections from input block to hidden layer 1
+      const blockRight = neuronPositions[0][15].x + 8;
+      const blockCenterY = canvasH / 2;
+      const blockHalfH = 60;
+
+      for (let j = 0; j < nOut; j++) {
+        const target = neuronPositions[1][j];
+
+        // Compute average weight magnitude for this neuron's input connections
+        let avgW = 0;
+        let avgGrad = 0;
+        for (let i = 0; i < nIn; i++) {
+          avgW += Math.abs(weights[l][j][i]);
+          avgGrad += gradMagnitudes[l][j][i];
+        }
+        avgW /= nIn;
+        avgGrad /= nIn;
+
+        // Bundle start: spread along right edge of input block
+        const bundleY = blockCenterY + ((j / (nOut - 1)) - 0.5) * blockHalfH * 2;
+
+        const isHovered = hoveredConnection && hoveredConnection.fromBundle &&
+                          hoveredConnection.layer === 0 && hoveredConnection.toIdx === j;
+
+        // Backprop animation
+        let animAlpha = 0;
+        if (backpropAnimPhase >= 0 && l === (weights.length - 1 - backpropAnimPhase)) {
+          animAlpha = backpropAnimProgress;
+        }
+
+        netCtx.beginPath();
+        netCtx.moveTo(blockRight, bundleY);
+        // Bezier curve for nice fan-out
+        const cpx = (blockRight + target.x) / 2;
+        netCtx.bezierCurveTo(cpx, bundleY, cpx, target.y, target.x - 10, target.y);
+
+        if (isHovered) {
+          netCtx.strokeStyle = '#facc15';
+          netCtx.lineWidth = 3;
+        } else if (animAlpha > 0) {
+          netCtx.strokeStyle = gradientColor(avgGrad, maxGrad);
+          netCtx.lineWidth = 1.5 + animAlpha * 2;
+          netCtx.globalAlpha = 0.4 + animAlpha * 0.6;
+        } else if (hasGradients) {
+          netCtx.strokeStyle = gradientColor(avgGrad, maxGrad);
+          netCtx.lineWidth = 1 + avgW * 4;
+          netCtx.globalAlpha = 0.35;
+        } else {
+          netCtx.strokeStyle = weightColor(avgW);
+          netCtx.lineWidth = 1 + avgW * 4;
+          netCtx.globalAlpha = 0.35;
+        }
+
+        netCtx.stroke();
+        netCtx.globalAlpha = 1;
+      }
+    } else {
+      // Draw individual connections
+      for (let j = 0; j < nOut; j++) {
+        for (let i = 0; i < nIn; i++) {
+          const from = neuronPositions[l][i];
+          const to = neuronPositions[l + 1][j];
+          const w = weights[l][j][i];
+          const gm = gradMagnitudes[l][j][i];
+
+          const isHovered = hoveredConnection && !hoveredConnection.fromBundle &&
+                            hoveredConnection.layer === l &&
+                            hoveredConnection.fromIdx === i && hoveredConnection.toIdx === j;
+
+          let animAlpha = 0;
+          if (backpropAnimPhase >= 0 && l === (weights.length - 1 - backpropAnimPhase)) {
+            animAlpha = backpropAnimProgress;
+          }
+
+          netCtx.beginPath();
+          netCtx.moveTo(from.x + 10, from.y);
+          netCtx.lineTo(to.x - 10, to.y);
+
+          if (isHovered || (draggingConnection && draggingConnection.layer === l &&
+              draggingConnection.fromIdx === i && draggingConnection.toIdx === j)) {
+            netCtx.strokeStyle = '#facc15';
+            netCtx.lineWidth = 3;
+            netCtx.globalAlpha = 1;
+          } else if (animAlpha > 0) {
+            netCtx.strokeStyle = gradientColor(gm, maxGrad);
+            netCtx.lineWidth = weightWidth(w) + animAlpha * 2;
+            netCtx.globalAlpha = 0.3 + animAlpha * 0.7;
+          } else if (hasGradients) {
+            netCtx.strokeStyle = gradientColor(gm, maxGrad);
+            netCtx.lineWidth = weightWidth(w);
+            netCtx.globalAlpha = 0.3;
+          } else {
+            netCtx.strokeStyle = weightColor(w);
+            netCtx.lineWidth = weightWidth(w);
+            netCtx.globalAlpha = 0.3;
+          }
+
+          netCtx.stroke();
+          netCtx.globalAlpha = 1;
+        }
+      }
+    }
+  }
+
+  // Draw neurons
+  for (let l = 0; l < LAYERS.length; l++) {
+    if (l === 0) {
+      // Draw input as a filled mini grid
+      const blockSize = 120;
+      const cellSize = blockSize / 16;
+      const startX = neuronPositions[0][0].x - cellSize / 2;
+      const startY = neuronPositions[0][0].y - cellSize / 2;
+
+      // Background
+      netCtx.fillStyle = '#0d1117';
+      netCtx.strokeStyle = '#334155';
+      netCtx.lineWidth = 1;
+      netCtx.fillRect(startX - 1, startY - 1, blockSize + 2, blockSize + 2);
+      netCtx.strokeRect(startX - 1, startY - 1, blockSize + 2, blockSize + 2);
+
+      for (let idx = 0; idx < 256; idx++) {
+        const r = Math.floor(idx / 16);
+        const c = idx % 16;
+        const v = activations.length > 0 ? activations[0][idx] : 0;
+        if (v > 0) {
+          const bright = Math.floor(v * 200 + 55);
+          netCtx.fillStyle = `rgb(${bright}, ${bright}, ${bright})`;
+          netCtx.fillRect(
+            startX + c * cellSize,
+            startY + r * cellSize,
+            cellSize, cellSize
+          );
+        }
+      }
+
+      // Label
+      netCtx.fillStyle = '#64748b';
+      netCtx.font = '11px system-ui';
+      netCtx.textAlign = 'center';
+      netCtx.fillText(LAYER_NAMES[0], startX + blockSize / 2, startY + blockSize + 18);
+
+    } else {
+      for (let i = 0; i < LAYERS[l]; i++) {
+        const pos = neuronPositions[l][i];
+        const act = activations.length > l ? activations[l][i] : 0;
+
+        // Neuron circle
+        const radius = l === LAYERS.length - 1 ? 14 : 10;
+        netCtx.beginPath();
+        netCtx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+
+        const brightness = Math.min(Math.abs(act), 1);
+        if (l === LAYERS.length - 1) {
+          // Output: color by probability
+          const g = Math.floor(100 + brightness * 155);
+          const b = Math.floor(200 + brightness * 55);
+          netCtx.fillStyle = `rgb(30, ${g}, ${b})`;
+        } else {
+          const v = Math.floor(30 + brightness * 180);
+          netCtx.fillStyle = `rgb(${v}, ${v}, ${Math.floor(v * 1.2)})`;
+        }
+        netCtx.fill();
+
+        netCtx.strokeStyle = '#475569';
+        netCtx.lineWidth = 1;
+        netCtx.stroke();
+
+        // Output labels
+        if (l === LAYERS.length - 1) {
+          netCtx.fillStyle = '#e2e8f0';
+          netCtx.font = 'bold 11px system-ui';
+          netCtx.textAlign = 'center';
+          netCtx.textBaseline = 'middle';
+          netCtx.fillText(i.toString(), pos.x, pos.y);
+        }
+      }
+
+      // Layer label
+      const firstPos = neuronPositions[l][0];
+      const lastPos = neuronPositions[l][LAYERS[l] - 1];
+      netCtx.fillStyle = '#64748b';
+      netCtx.font = '11px system-ui';
+      netCtx.textAlign = 'center';
+      netCtx.fillText(LAYER_NAMES[l], neuronPositions[l][0].x, lastPos.y + 30);
+    }
+  }
+
+  // Backprop animation: pulse overlay
+  if (backpropAnimPhase >= 0) {
+    const l = weights.length - 1 - backpropAnimPhase;
+    if (l >= 0 && l < weights.length) {
+      // Draw a glowing sweep from right to left across this layer's connections
+      const fromX = l === 0 ?
+        neuronPositions[0][15].x + 8 :
+        neuronPositions[l][0].x;
+      const toX = neuronPositions[l + 1][0].x;
+      const sweepX = toX + (fromX - toX) * backpropAnimProgress;
+
+      netCtx.beginPath();
+      netCtx.moveTo(sweepX, 0);
+      netCtx.lineTo(sweepX, canvasH);
+      netCtx.strokeStyle = `rgba(244, 114, 182, ${0.4 * (1 - backpropAnimProgress)})`;
+      netCtx.lineWidth = 8;
+      netCtx.stroke();
+    }
+  }
+}
+
+// ============================================================
+// OUTPUT BARS
+// ============================================================
+
+function createOutputBars() {
+  const container = document.getElementById('output-bars');
+  container.innerHTML = '';
+  for (let i = 0; i < 10; i++) {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+
+    const label = document.createElement('span');
+    label.className = 'bar-label';
+    label.textContent = i;
+
+    const track = document.createElement('div');
+    track.className = 'bar-track';
+
+    const fill = document.createElement('div');
+    fill.className = 'bar-fill';
+    fill.id = `out-bar-${i}`;
+    fill.style.width = '0%';
+    fill.style.background = '#3b82f6';
+    track.appendChild(fill);
+
+    const value = document.createElement('span');
+    value.className = 'bar-value';
+    value.id = `out-val-${i}`;
+    value.textContent = '0%';
+
+    row.appendChild(label);
+    row.appendChild(track);
+    row.appendChild(value);
+    container.appendChild(row);
+  }
+
+  // Sensitivity bars
+  const sensContainer = document.getElementById('sensitivity-bars');
+  sensContainer.innerHTML = '';
+  for (let i = 0; i < 10; i++) {
+    const row = document.createElement('div');
+    row.className = 'bar-row';
+
+    const label = document.createElement('span');
+    label.className = 'bar-label';
+    label.textContent = i;
+
+    const track = document.createElement('div');
+    track.className = 'bar-track';
+
+    const fill = document.createElement('div');
+    fill.className = 'bar-fill';
+    fill.id = `sens-bar-${i}`;
+    fill.style.width = '0%';
+    fill.style.background = '#f472b6';
+    track.appendChild(fill);
+
+    const value = document.createElement('span');
+    value.className = 'bar-value';
+    value.id = `sens-val-${i}`;
+    value.textContent = '\u2014';
+
+    row.appendChild(label);
+    row.appendChild(track);
+    row.appendChild(value);
+    container.appendChild(row);
+  }
+}
+
+function updateOutputBars() {
+  if (activations.length === 0) return;
+  const probs = activations[activations.length - 1];
+  const maxProb = Math.max(...probs);
+
+  for (let i = 0; i < 10; i++) {
+    const pct = (probs[i] * 100);
+    const fill = document.getElementById(`out-bar-${i}`);
+    const val = document.getElementById(`out-val-${i}`);
+
+    fill.style.width = pct + '%';
+    val.textContent = pct.toFixed(1) + '%';
+
+    if (probs[i] === maxProb) {
+      fill.style.background = '#22c55e';
+    } else {
+      fill.style.background = '#3b82f6';
+    }
+  }
+}
+
+function updateSensitivityBars() {
+  // Sensitivity = sum of absolute gradient magnitudes for all weights going into each output
+  const l = weights.length - 1;
+  const sensitivities = [];
+  let maxSens = 0.001;
+
+  for (let j = 0; j < 10; j++) {
+    let s = 0;
+    for (let i = 0; i < LAYERS[l]; i++) {
+      s += gradMagnitudes[l][j][i];
+    }
+    sensitivities.push(s);
+    if (s > maxSens) maxSens = s;
+  }
+
+  for (let i = 0; i < 10; i++) {
+    const pct = (sensitivities[i] / maxSens) * 100;
+    const fill = document.getElementById(`sens-bar-${i}`);
+    const val = document.getElementById(`sens-val-${i}`);
+
+    fill.style.width = pct + '%';
+    val.textContent = sensitivities[i].toFixed(3);
+
+    // Color by magnitude
+    const t = sensitivities[i] / maxSens;
+    const r = Math.floor(100 + t * 144);
+    const g = Math.floor(50 * (1 - t));
+    const b = Math.floor(120 + (1 - t) * 60);
+    fill.style.background = `rgb(${r},${g},${b})`;
+  }
+}
+
+// ============================================================
+// INTERACTION
+// ============================================================
+
+function getCanvasPos(e) {
+  const rect = netCanvas.getBoundingClientRect();
+  return {
+    x: (e.clientX - rect.left) * (canvasW / rect.width),
+    y: (e.clientY - rect.top) * (canvasH / rect.height)
+  };
+}
+
+netCanvas.addEventListener('mousemove', e => {
+  const pos = getCanvasPos(e);
+
+  if (draggingConnection) {
+    const dy = dragStartY - e.clientY;
+    const delta = dy * 0.005;
+    const conn = draggingConnection;
+
+    if (conn.fromBundle) {
+      // Adjust all weights to this neuron proportionally
+      for (let i = 0; i < LAYERS[0]; i++) {
+        weights[0][conn.toIdx][i] = weights[0][conn.toIdx][i] + delta * 0.01;
+      }
+    } else {
+      weights[conn.layer][conn.toIdx][conn.fromIdx] = dragStartWeight + delta;
+    }
+
+    dragStartY = e.clientY;
+    dragStartWeight = conn.fromBundle ? 0 : weights[conn.layer][conn.toIdx][conn.fromIdx];
+
+    runForwardAndRender();
+    return;
+  }
+
+  const conn = findConnection(pos.x, pos.y);
+  hoveredConnection = conn;
+
+  if (conn) {
+    netCanvas.style.cursor = 'ns-resize';
+
+    let text = '';
+    if (conn.fromBundle) {
+      // Show average weight info for bundle
+      let avgW = 0;
+      let maxW = -Infinity;
+      let minW = Infinity;
+      for (let i = 0; i < LAYERS[0]; i++) {
+        const w = weights[0][conn.toIdx][i];
+        avgW += w;
+        if (w > maxW) maxW = w;
+        if (w < minW) minW = w;
+      }
+      avgW /= LAYERS[0];
+      text = `Input \u2192 H1[${conn.toIdx}]\nAvg weight: ${avgW.toFixed(4)}\nRange: [${minW.toFixed(3)}, ${maxW.toFixed(3)}]\nDrag to adjust`;
+    } else {
+      const w = weights[conn.layer][conn.toIdx][conn.fromIdx];
+      const g = gradMagnitudes[conn.layer]?.[conn.toIdx]?.[conn.fromIdx] || 0;
+      text = `L${conn.layer}[${conn.fromIdx}] \u2192 L${conn.layer + 1}[${conn.toIdx}]\nWeight: ${w.toFixed(4)}\n|Gradient|: ${g.toFixed(6)}\nDrag up/down to wiggle`;
+    }
+
+    tooltip.textContent = text;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.clientX + 12) + 'px';
+    tooltip.style.top = (e.clientY - 10) + 'px';
+  } else {
+    netCanvas.style.cursor = 'default';
+    tooltip.style.display = 'none';
+  }
+
+  requestAnimationFrame(renderNetwork);
+});
+
+netCanvas.addEventListener('mousedown', e => {
+  const pos = getCanvasPos(e);
+  const conn = findConnection(pos.x, pos.y);
+
+  if (conn) {
+    draggingConnection = conn;
+    dragStartY = e.clientY;
+    dragStartWeight = conn.fromBundle ? 0 : weights[conn.layer][conn.toIdx][conn.fromIdx];
+    e.preventDefault();
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  if (draggingConnection) {
+    draggingConnection = null;
+    // Compute sensitivity after wiggle
+    const target = parseInt(document.getElementById('target-select').value);
+    forwardPass(pixels);
+    backwardPass(target);
+    updateSensitivityBars();
+    renderNetwork();
+  }
+});
+
+netCanvas.addEventListener('mouseleave', () => {
+  hoveredConnection = null;
+  tooltip.style.display = 'none';
+});
+
+// ============================================================
+// FORWARD PASS + RENDER HELPER
+// ============================================================
+
+function runForwardAndRender() {
+  forwardPass(pixels);
+  updateOutputBars();
+  renderNetwork();
+
+  const target = parseInt(document.getElementById('target-select').value);
+  const probs = activations[activations.length - 1];
+  const loss = crossEntropyLoss(probs, target);
+  document.getElementById('loss-val').textContent = loss.toFixed(4);
+}
+
+// ============================================================
+// BACKPROP ANIMATION
+// ============================================================
+
+function runBackpropAnimated() {
+  const target = parseInt(document.getElementById('target-select').value);
+  forwardPass(pixels);
+  backwardPass(target);
+  updateSensitivityBars();
+
+  const probs = activations[activations.length - 1];
+  const loss = crossEntropyLoss(probs, target);
+  document.getElementById('loss-val').textContent = loss.toFixed(4);
+
+  // Start animation
+  backpropAnimPhase = 0;
+  backpropAnimProgress = 0;
+  backpropAnimStartTime = performance.now();
+  requestAnimationFrame(animateBackprop);
+}
+
+function animateBackprop(timestamp) {
+  if (backpropAnimPhase < 0) return;
+
+  const elapsed = timestamp - backpropAnimStartTime;
+  backpropAnimProgress = Math.min(elapsed / ANIM_DURATION, 1);
+
+  renderNetwork();
+
+  if (backpropAnimProgress >= 1) {
+    backpropAnimPhase++;
+    if (backpropAnimPhase >= weights.length) {
+      backpropAnimPhase = -1;
+      renderNetwork();
+      return;
+    }
+    backpropAnimProgress = 0;
+    backpropAnimStartTime = timestamp;
+  }
+
+  requestAnimationFrame(animateBackprop);
+}
+
+function stepGradient() {
+  const target = parseInt(document.getElementById('target-select').value);
+  forwardPass(pixels);
+  backwardPass(target);
+  applyGradients();
+  runForwardAndRender();
+  updateSensitivityBars();
+}
+
+// ============================================================
+// WEIGHT MANAGEMENT
+// ============================================================
+
+function resetWeights() {
+  initWeights();
+  runForwardAndRender();
+}
+
+// Pre-trained weights: a simple set that can roughly classify some digits
+// These are hand-tuned to give basic structure (not trained, but plausible)
+function generatePretrained() {
+  initWeights();
+
+  // Give hidden layer 1 neurons some structure:
+  // Each neuron responds to a different spatial region of the 16x16 grid
+  for (let j = 0; j < 16; j++) {
+    // Each hidden1 neuron focuses on a 4x4 region (4 regions across, 4 down)
+    const regionR = Math.floor(j / 4) * 4;
+    const regionC = (j % 4) * 4;
+
+    for (let r = 0; r < 16; r++) {
+      for (let c = 0; c < 16; c++) {
+        const idx = r * 16 + c;
+        const inRegion = (r >= regionR && r < regionR + 4 && c >= regionC && c < regionC + 4);
+        if (inRegion) {
+          weights[0][j][idx] = 0.15 + Math.random() * 0.05;
+        } else {
+          weights[0][j][idx] = -0.01 + Math.random() * 0.02;
+        }
+      }
+    }
+    biases[0][j] = -0.3;
+  }
+
+  // Hidden 2: mix features
+  for (let j = 0; j < 16; j++) {
+    for (let i = 0; i < 16; i++) {
+      // Create some structured mixing
+      if (j === i) {
+        weights[1][j][i] = 0.4;
+      } else if (Math.abs(j - i) <= 2) {
+        weights[1][j][i] = 0.15;
+      } else {
+        weights[1][j][i] = -0.05 + Math.random() * 0.1;
+      }
+    }
+    biases[1][j] = -0.2;
+  }
+
+  // Output: each digit class gets a different pattern of hidden2 features
+  const digitPatterns = [
+    [1,1,1,1, 0,0,0,0, 1,1,1,1, 0,0,0,0],  // 0: top+bottom
+    [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0],  // 1: vertical center
+    [1,1,1,1, 0,0,1,1, 1,1,0,0, 1,1,1,1],  // 2: zigzag
+    [1,1,1,1, 0,0,1,1, 0,0,1,1, 1,1,1,1],  // 3: right-heavy
+    [1,0,0,0, 1,0,1,0, 1,1,1,1, 0,0,1,0],  // 4: L shape
+    [1,1,1,1, 1,1,0,0, 0,0,1,1, 1,1,1,1],  // 5: reverse-S
+    [1,1,0,0, 1,1,0,0, 1,1,1,1, 1,1,1,1],  // 6: bottom-heavy
+    [1,1,1,1, 0,0,0,1, 0,0,1,0, 0,1,0,0],  // 7: diagonal
+    [1,1,1,1, 1,1,1,1, 1,1,1,1, 1,1,1,1],  // 8: all
+    [1,1,1,1, 1,1,1,1, 0,0,1,1, 1,1,1,1],  // 9: top-heavy
+  ];
+
+  for (let j = 0; j < 10; j++) {
+    for (let i = 0; i < 16; i++) {
+      weights[2][j][i] = digitPatterns[j][i] * 0.3 - 0.1;
+    }
+    biases[2][j] = -0.5;
+  }
+}
+
+function loadPretrained() {
+  generatePretrained();
+  runForwardAndRender();
+}
+
+// ============================================================
+// SAMPLE DIGITS
+// ============================================================
+
+const sampleDigits = {
+  0: [
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,
+    0,0,0,0,1,1,1,0,0,1,1,1,0,0,0,0,
+    0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,1,1,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,0,1,1,1,0,0,1,1,1,0,0,0,0,
+    0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  ],
+  1: [
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,1,1,1,1,1,1,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  ],
+  7: [
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,
+    0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  ]
+};
+
+let sampleIdx = 0;
+const sampleKeys = Object.keys(sampleDigits);
+
+function loadSampleDigit() {
+  const key = sampleKeys[sampleIdx % sampleKeys.length];
+  sampleIdx++;
+  const data = sampleDigits[key];
+  for (let i = 0; i < 256; i++) {
+    pixels[i] = data[i];
+  }
+  document.getElementById('target-select').value = key;
+  renderDrawing();
+  runForwardAndRender();
+}
+
+// ============================================================
+// INITIALIZATION
+// ============================================================
+
+function init() {
+  initWeights();
+  createOutputBars();
+  resizeNetworkCanvas();
+  renderDrawing();
+  runForwardAndRender();
+}
+
+window.addEventListener('resize', () => {
+  resizeNetworkCanvas();
+  renderNetwork();
+});
+
+init();
+</script>
+</body>
+</html>
